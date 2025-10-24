@@ -311,9 +311,9 @@ const App: React.FC = () => {
   return (
     <>
       <div 
-          className="text-white min-h-screen overflow-x-hidden bg-gray-900"
+          className="text-white min-h-screen overflow-x-hidden"
           style={{
-              backgroundImage: `url('https://i.imgur.com/KQlFcXv.jpeg')`,
+              backgroundImage: `url('https://i.imgur.com/8z8hL8B.png')`,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
               backgroundAttachment: 'fixed',
