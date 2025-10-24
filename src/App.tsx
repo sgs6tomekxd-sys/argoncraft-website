@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI, Chat } from "@google/genai";
 
 // --- KOMPONENTY POMOCNICZE ---
 
@@ -8,11 +7,6 @@ interface FeatureCardProps {
   description: React.ReactNode;
   imageUrl: string;
   reverse?: boolean;
-}
-
-interface Message {
-    sender: 'user' | 'ai';
-    text: string;
 }
 
 /**
@@ -78,132 +72,10 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     </h2>
 );
 
-// --- KOMPONENT CZATU Z AI ---
-
-interface ChatWidgetProps {
-    isOpen: boolean;
-    onClose: () => void;
-}
-
-const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [input, setInput] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const chatRef = useRef<Chat | null>(null);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (isOpen && !chatRef.current) {
-            try {
-                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
-                chatRef.current = ai.chats.create({
-                    model: 'gemini-2.5-flash',
-                    config: {
-                        systemInstruction: `Jesteś Mędrcem ArgonCraft, pomocnym przewodnikiem po serwerze Minecraft ArgonCraft.pl. Odpowiadaj wyłącznie w języku polskim. Twoja wiedza opiera się na informacjach z tej strony. Bądź przyjazny, zwięzły i zachęcaj graczy do dołączenia. Kluczowe informacje o serwerze to: IP: ARGONCRAFT.PL, Wersja: 1.21+, Tryb: Full Custom Survival + RPG. Serwer ma dungeony, misje, przepustkę bojową, prace, arenę PvP, kasyno i wiele więcej.`,
-                    },
-                });
-                setMessages([{ sender: 'ai', text: 'Witaj, wędrowcze! Jestem Mędrzec ArgonCraft. Jak mogę pomóc Ci w Twojej przygodzie?' }]);
-            } catch (error) {
-                console.error("Failed to initialize Gemini AI:", error);
-                setMessages([{ sender: 'ai', text: 'Przepraszam, mam chwilowe problemy z połączeniem z krainą wiedzy. Spróbuj ponownie później.' }]);
-            }
-        }
-    }, [isOpen]);
-
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
-
-    const handleSendMessage = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!input.trim() || isLoading || !chatRef.current) return;
-
-        const userMessage: Message = { sender: 'user', text: input };
-        setMessages(prev => [...prev, userMessage]);
-        setInput('');
-        setIsLoading(true);
-
-        try {
-            const result = await chatRef.current.sendMessage({ message: input });
-            const aiMessage: Message = { sender: 'ai', text: result.text };
-            setMessages(prev => [...prev, aiMessage]);
-        } catch (error) {
-            console.error("Gemini API error:", error);
-            const errorMessage: Message = { sender: 'ai', text: 'Coś poszło nie tak. Spróbuj zadać inne pytanie.' };
-            setMessages(prev => [...prev, errorMessage]);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    if (!isOpen) {
-        return null;
-    }
-
-    return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[1000] p-4 animate-fade-in">
-            <div className="bg-gray-900/80 backdrop-blur-md border border-purple-500/50 rounded-2xl shadow-2xl w-full max-w-lg h-[70vh] flex flex-col font-roboto">
-                <div className="flex justify-between items-center p-4 border-b border-gray-700">
-                    <h3 className="text-xl font-orbitron text-purple-300">Mędrzec ArgonCraft</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-
-                <div className="flex-1 p-4 overflow-y-auto space-y-4">
-                    {messages.map((msg, index) => (
-                        <div key={index} className={`flex items-end gap-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            {msg.sender === 'ai' && <img src="https://i.imgur.com/NMg3Pgj.png" alt="AI" className="w-8 h-8 rounded-full" />}
-                            <div className={`max-w-xs md:max-w-md p-3 rounded-2xl ${msg.sender === 'user' ? 'bg-indigo-600 rounded-br-none' : 'bg-gray-700 rounded-bl-none'}`}>
-                                <p className="text-white text-sm whitespace-pre-wrap">{msg.text}</p>
-                            </div>
-                        </div>
-                    ))}
-                    {isLoading && (
-                        <div className="flex justify-start gap-2">
-                            <img src="https://i.imgur.com/NMg3Pgj.png" alt="AI" className="w-8 h-8 rounded-full" />
-                            <div className="bg-gray-700 rounded-2xl rounded-bl-none p-3">
-                                <div className="flex items-center space-x-1">
-                                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-pulse [animation-delay:0s]"></span>
-                                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-pulse [animation-delay:0.2s]"></span>
-                                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-pulse [animation-delay:0.4s]"></span>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    <div ref={messagesEndRef} />
-                </div>
-
-                <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-700">
-                    <div className="flex items-center bg-gray-800 rounded-lg">
-                        <input
-                            type="text"
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            placeholder="Zadaj pytanie..."
-                            className="flex-1 bg-transparent p-3 text-white placeholder-gray-500 focus:outline-none"
-                            disabled={isLoading}
-                        />
-                        <button type="submit" disabled={isLoading || !input.trim()} className="p-3 text-purple-400 hover:text-purple-300 disabled:text-gray-600 transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                            </svg>
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-
 // --- GŁÓWNY KOMPONENT APLIKACJI ---
 
 const App: React.FC = () => {
     const [copyButtonText, setCopyButtonText] = useState('Skopiuj IP');
-    const [isChatOpen, setIsChatOpen] = useState(false);
     const headerContentRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -309,8 +181,6 @@ const App: React.FC = () => {
     ];
 
   return (
-    <>
-      {/* Usunęliśmy stąd style tła, ponieważ są teraz zarządzane globalnie w index.html */}
       <div className="text-white min-h-screen overflow-x-hidden">
         {/* Sekcja Nagłówka */}
         <header className="flex flex-col items-center justify-center min-h-screen text-center p-6 relative overflow-hidden">
@@ -328,7 +198,7 @@ const App: React.FC = () => {
               >
                   {copyButtonText}
               </button>
-              <p className="text-lg md:text-2xl text-gray-300 font-bold mb-1">Wersja: 1.21+</p>
+              <p className="text-lg md:text-2xl text-gray-300 font-bold mb-1">Wersja: 1.21.4</p>
               <p className="text-md md:text-xl text-purple-300 font-semibold mb-8">Tryb: Full Custom Survival + RPG</p>
               <div className="flex flex-col sm:flex-row gap-4">
               <a href="https://vishop.pl/shop/15347/server/14526" target="_blank" rel="noopener noreferrer" className="px-6 py-3 sm:px-8 sm:py-4 text-lg sm:text-xl font-bold text-white bg-gradient-to-r from-green-500 to-lime-500 rounded-lg shadow-lg hover:scale-105 hover:shadow-green-500/50 transform transition-all duration-300">
@@ -338,16 +208,6 @@ const App: React.FC = () => {
                   DISCORD
               </a>
               </div>
-              <button
-                onClick={() => setIsChatOpen(true)}
-                className="mt-6 inline-flex items-center justify-center gap-3 px-8 py-4 text-xl font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg shadow-lg hover:scale-105 hover:shadow-purple-500/50 transform transition-all duration-300"
-                aria-label="Otwórz czat z Mędrcem ArgonCraft"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                Zapytaj Mędrca
-              </button>
           </div>
         </header>
         
@@ -434,8 +294,6 @@ const App: React.FC = () => {
           <p className="text-gray-400">&copy; {new Date().getFullYear()} ArgonCraft.pl. Wszelkie prawa zastrzeżone.</p>
         </footer>
       </div>
-      <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
-    </>
   );
 };
 
