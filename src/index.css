@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 body {
     font-family: 'Roboto', sans-serif;
     background-image: url('https://i.imgur.com/gdOlfV9.jpeg') !important;
@@ -5,6 +9,7 @@ body {
     background-position: center;
     background-attachment: fixed;
     background-color: #111827; /* Fallback color */
+    cursor: url('https://i.imgur.com/qLw5jUj.png'), auto;
 }
 
 .font-orbitron {
@@ -60,4 +65,17 @@ body {
         border-image: conic-gradient(from 360deg, transparent 0%, #a855f7 5%, transparent 10%) 1;
         transform: rotate(360deg);
     }
+}
+
+/* Klasa sr-only do ukrywania tekstu dla czytników ekranu */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
