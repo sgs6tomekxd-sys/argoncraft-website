@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { GoogleGenAI, Chat } from "@google/genai";
 
 // --- KOMPONENTY POMOCNICZE ---
 
@@ -7,6 +8,11 @@ interface FeatureCardProps {
   description: React.ReactNode;
   imageUrl: string;
   reverse?: boolean;
+}
+
+interface Message {
+    sender: 'user' | 'ai';
+    text: string;
 }
 
 /**
@@ -72,11 +78,132 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     </h2>
 );
 
+// --- KOMPONENT CZATU Z AI ---
+
+interface ChatWidgetProps {
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [input, setInput] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const chatRef = useRef<Chat | null>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (isOpen && !chatRef.current) {
+            try {
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+                chatRef.current = ai.chats.create({
+                    model: 'gemini-2.5-flash',
+                    config: {
+                        systemInstruction: `Jesteś Mędrcem ArgonCraft, pomocnym przewodnikiem po serwerze Minecraft ArgonCraft.pl. Odpowiadaj wyłącznie w języku polskim. Twoja wiedza opiera się na informacjach z tej strony. Bądź przyjazny, zwięzły i zachęcaj graczy do dołączenia. Kluczowe informacje o serwerze to: IP: ARGONCRAFT.PL, Wersja: 1.21+, Tryb: Full Custom Survival + RPG. Serwer ma dungeony, misje, przepustkę bojową, prace, arenę PvP, kasyno i wiele więcej.`,
+                    },
+                });
+                setMessages([{ sender: 'ai', text: 'Witaj, wędrowcze! Jestem Mędrzec ArgonCraft. Jak mogę pomóc Ci w Twojej przygodzie?' }]);
+            } catch (error) {
+                console.error("Failed to initialize Gemini AI:", error);
+                setMessages([{ sender: 'ai', text: 'Przepraszam, mam chwilowe problemy z połączeniem z krainą wiedzy. Spróbuj ponownie później.' }]);
+            }
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
+
+    const handleSendMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!input.trim() || isLoading || !chatRef.current) return;
+
+        const userMessage: Message = { sender: 'user', text: input };
+        setMessages(prev => [...prev, userMessage]);
+        setInput('');
+        setIsLoading(true);
+
+        try {
+            const result = await chatRef.current.sendMessage({ message: input });
+            const aiMessage: Message = { sender: 'ai', text: result.text };
+            setMessages(prev => [...prev, aiMessage]);
+        } catch (error) {
+            console.error("Gemini API error:", error);
+            const errorMessage: Message = { sender: 'ai', text: 'Coś poszło nie tak. Spróbuj zadać inne pytanie.' };
+            setMessages(prev => [...prev, errorMessage]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    if (!isOpen) {
+        return null;
+    }
+
+    return (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[1000] p-4 animate-fade-in">
+            <div className="bg-gray-900/80 backdrop-blur-md border border-purple-500/50 rounded-2xl shadow-2xl w-full max-w-lg h-[70vh] flex flex-col font-roboto">
+                <div className="flex justify-between items-center p-4 border-b border-gray-700">
+                    <h3 className="text-xl font-orbitron text-purple-300">Mędrzec ArgonCraft</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div className="flex-1 p-4 overflow-y-auto space-y-4">
+                    {messages.map((msg, index) => (
+                        <div key={index} className={`flex items-end gap-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            {msg.sender === 'ai' && <img src="https://i.imgur.com/NMg3Pgj.png" alt="AI" className="w-8 h-8 rounded-full" />}
+                            <div className={`max-w-xs md:max-w-md p-3 rounded-2xl ${msg.sender === 'user' ? 'bg-indigo-600 rounded-br-none' : 'bg-gray-700 rounded-bl-none'}`}>
+                                <p className="text-white text-sm whitespace-pre-wrap">{msg.text}</p>
+                            </div>
+                        </div>
+                    ))}
+                    {isLoading && (
+                        <div className="flex justify-start gap-2">
+                            <img src="https://i.imgur.com/NMg3Pgj.png" alt="AI" className="w-8 h-8 rounded-full" />
+                            <div className="bg-gray-700 rounded-2xl rounded-bl-none p-3">
+                                <div className="flex items-center space-x-1">
+                                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-pulse [animation-delay:0s]"></span>
+                                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-pulse [animation-delay:0.2s]"></span>
+                                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-pulse [animation-delay:0.4s]"></span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                </div>
+
+                <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-700">
+                    <div className="flex items-center bg-gray-800 rounded-lg">
+                        <input
+                            type="text"
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            placeholder="Zadaj pytanie..."
+                            className="flex-1 bg-transparent p-3 text-white placeholder-gray-500 focus:outline-none"
+                            disabled={isLoading}
+                        />
+                        <button type="submit" disabled={isLoading || !input.trim()} className="p-3 text-purple-400 hover:text-purple-300 disabled:text-gray-600 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                            </svg>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 
 // --- GŁÓWNY KOMPONENT APLIKACJI ---
 
 const App: React.FC = () => {
     const [copyButtonText, setCopyButtonText] = useState('Skopiuj IP');
+    const [isChatOpen, setIsChatOpen] = useState(false);
     const headerContentRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -182,127 +309,133 @@ const App: React.FC = () => {
     ];
 
   return (
-    <div 
-        className="text-white min-h-screen overflow-x-hidden bg-gray-900"
-    >
-        <div className="fixed inset-0 w-full h-full z-[-1]" style={{
-            backgroundImage: `url('https://i.imgur.com/KQlFcXv.jpeg')`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-        }}></div>
+    <>
+      {/* Usunęliśmy stąd style tła, ponieważ są teraz zarządzane globalnie w index.html */}
+      <div className="text-white min-h-screen overflow-x-hidden">
+        {/* Sekcja Nagłówka */}
+        <header className="flex flex-col items-center justify-center min-h-screen text-center p-6 relative overflow-hidden">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+          <div ref={headerContentRef} className="relative z-10 flex flex-col items-center">
+              <img src="https://i.imgur.com/NMg3Pgj.png" alt="ArgonCraft Logo" className="w-48 md:w-64 mb-6 drop-shadow-lg" />
+              <div className="mb-2 animate-pulse">
+                  <h1 className="text-4xl sm:text-5xl md:text-7xl font-black font-orbitron tracking-widest uppercase bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 bg-clip-text text-transparent drop-shadow-lg">
+                      IP: ARGONCRAFT.PL
+                  </h1>
+              </div>
+              <button 
+                  onClick={handleCopyIp} 
+                  className={`mb-4 px-4 py-2 text-sm font-semibold rounded-md transition-all duration-300 ${copyButtonText === 'Skopiowano!' ? 'bg-green-600 text-white' : 'bg-purple-600/50 text-purple-200 hover:bg-purple-600'}`}
+              >
+                  {copyButtonText}
+              </button>
+              <p className="text-lg md:text-2xl text-gray-300 font-bold mb-1">Wersja: 1.21+</p>
+              <p className="text-md md:text-xl text-purple-300 font-semibold mb-8">Tryb: Full Custom Survival + RPG</p>
+              <div className="flex flex-col sm:flex-row gap-4">
+              <a href="https://vishop.pl/shop/15347/server/14526" target="_blank" rel="noopener noreferrer" className="px-6 py-3 sm:px-8 sm:py-4 text-lg sm:text-xl font-bold text-white bg-gradient-to-r from-green-500 to-lime-500 rounded-lg shadow-lg hover:scale-105 hover:shadow-green-500/50 transform transition-all duration-300">
+                  SKLEP
+              </a>
+              <a href="https://discord.com/invite/vnEcVcMBzA" target="_blank" rel="noopener noreferrer" className="px-6 py-3 sm:px-8 sm:py-4 text-lg sm:text-xl font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-500 rounded-lg shadow-lg hover:scale-105 hover:shadow-blue-500/50 transform transition-all duration-300">
+                  DISCORD
+              </a>
+              </div>
+              <button
+                onClick={() => setIsChatOpen(true)}
+                className="mt-6 inline-flex items-center justify-center gap-3 px-8 py-4 text-xl font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg shadow-lg hover:scale-105 hover:shadow-purple-500/50 transform transition-all duration-300"
+                aria-label="Otwórz czat z Mędrcem ArgonCraft"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                Zapytaj Mędrca
+              </button>
+          </div>
+        </header>
+        
+        {/* Główna Zawartość Strony */}
+        <main className="py-16 sm:py-20 px-4 sm:px-6 bg-black/40 backdrop-blur-lg">
+          <div className="max-w-7xl mx-auto space-y-20 sm:space-y-24">
+              {/* Sekcja Wprowadzająca */}
+              <section className="text-center">
+                  <SectionTitle>Witaj na ArgonCraft.pl!</SectionTitle>
+                  <p className="max-w-4xl mx-auto text-lg sm:text-xl text-gray-300 leading-relaxed bg-gray-900/50 p-6 rounded-xl">
+                      Zanurz się w świecie pełnym przygód, gdzie granice wyznacza tylko Twoja wyobraźnia. Nasz serwer Survival + RPG został stworzony z pasją, oferując unikalne mechaniki, wciągające misje i społeczność, która czeka na Ciebie. Nie wiesz od czego zacząć? Spokojnie! Na serwerze dostępna jest dedykowana Wikipedia, która opisuje wszystkie nasze systemy i możliwości. Dołącz do nas i rozpocznij swoją legendę!
+                  </p>
+              </section>
+              
+              {/* Główne Cechy */}
+              <section className="space-y-12">
+                  {features.map((feature, index) => (
+                      <FeatureCard key={index} {...feature} />
+                  ))}
+              </section>
 
-      {/* Sekcja Nagłówka */}
-      <header className="flex flex-col items-center justify-center min-h-screen text-center p-6 relative overflow-hidden">
-        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
-        <div ref={headerContentRef} className="relative z-10 flex flex-col items-center">
-            <img src="https://i.imgur.com/NMg3Pgj.png" alt="ArgonCraft Logo" className="w-48 md:w-64 mb-6 drop-shadow-lg" />
-            <div className="mb-2 animate-pulse">
-                <h1 className="text-4xl sm:text-5xl md:text-7xl font-black font-orbitron tracking-widest uppercase bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 bg-clip-text text-transparent drop-shadow-lg">
-                    IP: ARGONCRAFT.PL
-                </h1>
-            </div>
-            <button 
-                onClick={handleCopyIp} 
-                className={`mb-4 px-4 py-2 text-sm font-semibold rounded-md transition-all duration-300 ${copyButtonText === 'Skopiowano!' ? 'bg-green-600 text-white' : 'bg-purple-600/50 text-purple-200 hover:bg-purple-600'}`}
-            >
-                {copyButtonText}
-            </button>
-            <p className="text-lg md:text-2xl text-gray-300 font-bold mb-1">Wersja: 1.21+</p>
-            <p className="text-md md:text-xl text-purple-300 font-semibold mb-8">Tryb: Full Custom Survival + RPG</p>
-            <div className="flex flex-col sm:flex-row gap-4">
-            <a href="https://vishop.pl/shop/15347/server/14526" target="_blank" rel="noopener noreferrer" className="px-6 py-3 sm:px-8 sm:py-4 text-lg sm:text-xl font-bold text-white bg-gradient-to-r from-green-500 to-lime-500 rounded-lg shadow-lg hover:scale-105 hover:shadow-green-500/50 transform transition-all duration-300">
-                SKLEP
-            </a>
-            <a href="https://discord.com/invite/vnEcVcMBzA" target="_blank" rel="noopener noreferrer" className="px-6 py-3 sm:px-8 sm:py-4 text-lg sm:text-xl font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-500 rounded-lg shadow-lg hover:scale-105 hover:shadow-blue-500/50 transform transition-all duration-300">
-                DISCORD
-            </a>
-            </div>
-        </div>
-      </header>
-      
-      {/* Główna Zawartość Strony */}
-      <main className="py-16 sm:py-20 px-4 sm:px-6 bg-black/40 backdrop-blur-lg">
-        <div className="max-w-7xl mx-auto space-y-20 sm:space-y-24">
-            {/* Sekcja Wprowadzająca */}
-            <section className="text-center">
-                <SectionTitle>Witaj na ArgonCraft.pl!</SectionTitle>
-                <p className="max-w-4xl mx-auto text-lg sm:text-xl text-gray-300 leading-relaxed bg-gray-900/50 p-6 rounded-xl">
-                    Zanurz się w świecie pełnym przygód, gdzie granice wyznacza tylko Twoja wyobraźnia. Nasz serwer Survival + RPG został stworzony z pasją, oferując unikalne mechaniki, wciągające misje i społeczność, która czeka na Ciebie. Nie wiesz od czego zacząć? Spokojnie! Na serwerze dostępna jest dedykowana Wikipedia, która opisuje wszystkie nasze systemy i możliwości. Dołącz do nas i rozpocznij swoją legendę!
-                </p>
-            </section>
-            
-            {/* Główne Cechy */}
-            <section className="space-y-12">
-                {features.map((feature, index) => (
-                    <FeatureCard key={index} {...feature} />
-                ))}
-            </section>
+               {/* Sekcja Dungeonów */}
+              <section>
+                  <SectionTitle>Czekają na Ciebie Wyjątkowe Dungeony</SectionTitle>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+                      <div className="image-hover-wrapper rounded-xl"><img src="https://i.imgur.com/lnvgaAG.jpeg" alt="Dungeon 1" className="w-full h-auto rounded-xl shadow-lg" loading="lazy" /></div>
+                      <div className="image-hover-wrapper rounded-xl"><img src="https://i.imgur.com/aTm61S5.jpeg" alt="Dungeon 2" className="w-full h-auto rounded-xl shadow-lg" loading="lazy" /></div>
+                      <div className="image-hover-wrapper rounded-xl"><img src="https://i.imgur.com/gX2XxoP.jpeg" alt="Dungeon 3" className="w-full h-auto rounded-xl shadow-lg" loading="lazy" /></div>
+                  </div>
+              </section>
 
-             {/* Sekcja Dungeonów */}
-            <section>
-                <SectionTitle>Czekają na Ciebie Wyjątkowe Dungeony</SectionTitle>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-                    <div className="image-hover-wrapper rounded-xl"><img src="https://i.imgur.com/lnvgaAG.jpeg" alt="Dungeon 1" className="w-full h-auto rounded-xl shadow-lg" loading="lazy" /></div>
-                    <div className="image-hover-wrapper rounded-xl"><img src="https://i.imgur.com/aTm61S5.jpeg" alt="Dungeon 2" className="w-full h-auto rounded-xl shadow-lg" loading="lazy" /></div>
-                    <div className="image-hover-wrapper rounded-xl"><img src="https://i.imgur.com/gX2XxoP.jpeg" alt="Dungeon 3" className="w-full h-auto rounded-xl shadow-lg" loading="lazy" /></div>
-                </div>
-            </section>
+               {/* Benefity dla Nowych Graczy */}
+              <section>
+                  <SectionTitle>Benefity dla Nowych Graczy</SectionTitle>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
+                  {newPlayerFeatures.map((feature, index) => (
+                       <div key={index} className="bg-gray-800/50 p-6 rounded-2xl shadow-lg border border-gray-700/50 text-center transition-transform duration-300 hover:-translate-y-2 backdrop-blur-sm">
+                           <div className="image-hover-wrapper rounded-lg mb-4">
+                              <img src={feature.imageUrl} alt={feature.title} className="rounded-lg w-full h-auto"/>
+                           </div>
+                           <h3 className="text-2xl font-bold font-orbitron text-purple-300 mb-2">{feature.title}</h3>
+                           <p className="text-gray-300">{feature.description}</p>
+                       </div>
+                  ))}
+                  </div>
+              </section>
+              
+              {/* Rozwój i Ekonomia */}
+              <section className="space-y-12">
+                   <SectionTitle>Rozwój i Ekonomia</SectionTitle>
+                   {economyFeatures.map((feature, index) => (
+                      <FeatureCard key={index} {...feature} />
+                  ))}
+              </section>
+              
+              {/* Rywalizacja i Zabawa */}
+              <section className="space-y-12">
+                   <SectionTitle>Rywalizacja i Zabawa</SectionTitle>
+                   {activityFeatures.map((feature, index) => (
+                      <FeatureCard key={index} {...feature} />
+                  ))}
+              </section>
+          </div>
+        </main>
 
-             {/* Benefity dla Nowych Graczy */}
-            <section>
-                <SectionTitle>Benefity dla Nowych Graczy</SectionTitle>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
-                {newPlayerFeatures.map((feature, index) => (
-                     <div key={index} className="bg-gray-800/50 p-6 rounded-2xl shadow-lg border border-gray-700/50 text-center transition-transform duration-300 hover:-translate-y-2 backdrop-blur-sm">
-                         <div className="image-hover-wrapper rounded-lg mb-4">
-                            <img src={feature.imageUrl} alt={feature.title} className="rounded-lg w-full h-auto"/>
-                         </div>
-                         <h3 className="text-2xl font-bold font-orbitron text-purple-300 mb-2">{feature.title}</h3>
-                         <p className="text-gray-300">{feature.description}</p>
-                     </div>
-                ))}
-                </div>
-            </section>
-            
-            {/* Rozwój i Ekonomia */}
-            <section className="space-y-12">
-                 <SectionTitle>Rozwój i Ekonomia</SectionTitle>
-                 {economyFeatures.map((feature, index) => (
-                    <FeatureCard key={index} {...feature} />
-                ))}
-            </section>
-            
-            {/* Rywalizacja i Zabawa */}
-            <section className="space-y-12">
-                 <SectionTitle>Rywalizacja i Zabawa</SectionTitle>
-                 {activityFeatures.map((feature, index) => (
-                    <FeatureCard key={index} {...feature} />
-                ))}
-            </section>
-        </div>
-      </main>
+        {/* Wezwanie do Działania (CTA) w Stopce */}
+        <section className="py-16 sm:py-20 bg-black/50 backdrop-blur-lg">
+          <div className="max-w-4xl mx-auto text-center px-4 sm:px-6">
+              <div className="image-hover-wrapper rounded-lg max-w-md mx-auto mb-8">
+                  <img src="https://i.imgur.com/v12ZocS.png" alt="ArgonCraft Zapowiedź" className="w-full h-auto rounded-lg shadow-2xl shadow-purple-500/20"/>
+              </div>
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold font-orbitron text-white text-shadow mb-4">To dopiero początek!</h2>
+              <p className="text-lg sm:text-xl text-gray-300 leading-relaxed mb-8">
+                  Odkryłeś tylko ułamek tego, co oferuje ArgonCraft.pl. Dołącz do naszej społeczności na Discordzie, wejdź na serwer i zapisz się na beta testy, aby jako pierwszy doświadczyć nadchodzących nowości i kształtować przyszłość serwera!
+              </p>
+              <a href="https://discord.com/invite/vnEcVcMBzA" target="_blank" rel="noopener noreferrer" className="inline-block px-8 sm:px-10 py-4 sm:py-5 text-lg sm:text-xl font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg shadow-lg hover:scale-105 hover:shadow-purple-500/50 transform transition-all duration-300">
+                  Dołącz do Discorda i Zapisz się na Testy!
+              </a>
+          </div>
+        </section>
 
-      {/* Wezwanie do Działania (CTA) w Stopce */}
-      <section className="py-16 sm:py-20 bg-black/50 backdrop-blur-lg">
-        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6">
-            <div className="image-hover-wrapper rounded-lg max-w-md mx-auto mb-8">
-                <img src="https://i.imgur.com/v12ZocS.png" alt="ArgonCraft Zapowiedź" className="w-full h-auto rounded-lg shadow-2xl shadow-purple-500/20"/>
-            </div>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold font-orbitron text-white text-shadow mb-4">To dopiero początek!</h2>
-            <p className="text-lg sm:text-xl text-gray-300 leading-relaxed mb-8">
-                Odkryłeś tylko ułamek tego, co oferuje ArgonCraft.pl. Dołącz do naszej społeczności na Discordzie, wejdź na serwer i zapisz się na beta testy, aby jako pierwszy doświadczyć nadchodzących nowości i kształtować przyszłość serwera!
-            </p>
-            <a href="https://discord.com/invite/vnEcVcMBzA" target="_blank" rel="noopener noreferrer" className="inline-block px-8 sm:px-10 py-4 sm:py-5 text-lg sm:text-xl font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg shadow-lg hover:scale-105 hover:shadow-purple-500/50 transform transition-all duration-300">
-                Dołącz do Discorda i Zapisz się na Testy!
-            </a>
-        </div>
-      </section>
-
-      {/* Stopka z Prawami Autorskimi */}
-      <footer className="bg-gray-900/50 border-t border-gray-800 py-6 text-center">
-        <p className="text-gray-400">&copy; {new Date().getFullYear()} ArgonCraft.pl. Wszelkie prawa zastrzeżone.</p>
-      </footer>
-    </div>
+        {/* Stopka z Prawami Autorskimi */}
+        <footer className="bg-gray-900/50 border-t border-gray-800 py-6 text-center">
+          <p className="text-gray-400">&copy; {new Date().getFullYear()} ArgonCraft.pl. Wszelkie prawa zastrzeżone.</p>
+        </footer>
+      </div>
+      <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+    </>
   );
 };
 
