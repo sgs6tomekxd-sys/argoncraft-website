@@ -9,7 +9,14 @@ body {
     background-position: center;
     background-attachment: fixed;
     background-color: #111827; /* Fallback color */
-    cursor: url('https://i.imgur.com/qLw5jUj.png'), auto;
+    /* ZMIANA: Nowy, zoptymalizowany kursor-miecz z precyzyjnym hotspotem */
+    cursor: url('https://i.imgur.com/y4a02K5.png') 8 24, auto;
+}
+
+/* DODANE: Lepsza interakcja - kursor-łapka dla klikalnych elementów */
+a, button, [role="button"], input[type="submit"], [style*="cursor: pointer"] {
+    /* ZMIANA: Nowy, zoptymalizowany kursor-łapka z precyzyjnym hotspotem */
+    cursor: url('https://i.imgur.com/BiLeUvQ.png') 8 0, pointer;
 }
 
 .font-orbitron {
